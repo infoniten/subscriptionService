@@ -1,0 +1,16 @@
+# Local development dependencies for the Subscription Service.
+# Start with: docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: subscriptions
+      POSTGRES_USER: subscriptions
+      POSTGRES_PASSWORD: subscriptions
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

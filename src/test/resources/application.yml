@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  flyway:
+    enabled: false
+
+subscription:
+  topic:
+    prefix: subscription
+  redis:
+    channel: subscriptions:changes
+    runtime-set-key: subs:runtime
+    config-key-prefix: "sub:"
+  initialization:
+    base-url: http://initialization-service
+  rate-limits:
+    max-subscriptions-per-subscriber: 100
+    max-topics-per-subscriber: 20
+    max-subscription-creations-per-hour: 60
+    max-initializations-per-hour: 20
+    max-fields: 100
+    max-filter-length: 4096
