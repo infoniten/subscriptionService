@@ -9,3 +9,6 @@ target/
 
 # OS
 .DS_Store
+
+# Sibling DataDictionary service lives here as a separate git repo; not part of this project
+/DataDictionary/

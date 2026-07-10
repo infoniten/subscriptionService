@@ -13,6 +13,7 @@ public class SubscriptionProperties {
     private final Redis redis = new Redis();
     private final Initialization initialization = new Initialization();
     private final RateLimits rateLimits = new RateLimits();
+    private final Metamodel metamodel = new Metamodel();
 
     public Topic getTopic() {
         return topic;
@@ -28,6 +29,10 @@ public class SubscriptionProperties {
 
     public RateLimits getRateLimits() {
         return rateLimits;
+    }
+
+    public Metamodel getMetamodel() {
+        return metamodel;
     }
 
     public static class Topic {
@@ -86,6 +91,44 @@ public class SubscriptionProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+    }
+
+    /**
+     * DataDictionary integration used by the field/filter validator. The metamodel is loaded once
+     * at startup (fail-fast). Scalar fields + hierarchy come from {@code metadataPath}; relations
+     * (for reference-traversal paths like {@code baseCurrency.code}) come from {@code relationsPath}.
+     */
+    public static class Metamodel {
+        /** Base URL of the DataDictionary service. */
+        private String baseUrl = "http://data-dictionary:8080";
+        /** Search-service metadata export (classes, scalar fields, hierarchy). */
+        private String metadataPath = "/api/search-service/metadata";
+        /** Full metamodel export — used only to read relations (alias -> target class). */
+        private String relationsPath = "/api/metamodel/export";
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getMetadataPath() {
+            return metadataPath;
+        }
+
+        public void setMetadataPath(String metadataPath) {
+            this.metadataPath = metadataPath;
+        }
+
+        public String getRelationsPath() {
+            return relationsPath;
+        }
+
+        public void setRelationsPath(String relationsPath) {
+            this.relationsPath = relationsPath;
         }
     }
 

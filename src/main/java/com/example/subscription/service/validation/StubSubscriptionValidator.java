@@ -3,15 +3,15 @@ package com.example.subscription.service.validation;
 import com.example.subscription.domain.EngineType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * Stub validator: every subscription is considered valid (requirement 14).
- * RSQL / field / operator validation will be added here later without changing the public API.
+ * No-op validator that accepts every subscription (the original requirement-14 stub).
+ *
+ * <p>Superseded in production by {@link MetamodelSubscriptionValidator}; retained (not a Spring
+ * bean) as a convenient test double and as a fallback should metamodel validation be disabled.
  */
-@Component
 public class StubSubscriptionValidator implements SubscriptionValidator {
 
     private static final Logger log = LoggerFactory.getLogger(StubSubscriptionValidator.class);

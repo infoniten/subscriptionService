@@ -73,6 +73,26 @@ curl -X POST http://localhost:8080/api/v1/subscribers/risk-service/subscriptions
 Подписок на пользователя, топиков на пользователя, создаваемых подписок в час, initialization в час,
 максимум полей, максимальная длина фильтра.
 
+## Валидация полей и фильтра (DataDictionary)
+
+Компонент валидации (`SubscriptionValidator`) на старте загружает метамодель из **DataDictionary**
+и проверяет по ней список `fields` и селекторы внутри `filter`.
+
+- Источники (оба URL конфигурируемы, `subscription.metamodel.*`):
+  - `GET /api/search-service/metadata` — классы (`sourceValue` ↔ canonical), скалярные поля, иерархия;
+  - `GET /api/metamodel/export` — связи (`relationAlias` → target-класс) для путей вида `baseCurrency.code`.
+- Формат поля: `Class.field` или `Class.relation.field` (обход связей), например
+  `Trade.portfolioId`, `Entity.id`, `FxSpotForwardTrade.baseCurrency.code`. Наследованные поля/связи
+  видны через иерархию классов.
+- Ошибки: неверные поля → `INVALID_FIELDS`, неверные селекторы фильтра → `INVALID_FILTER`.
+  RSQL не компилируется — из фильтра лишь извлекаются селекторы `Class.field` (это работа Engine).
+- **Fail-fast**: если метамодель не удалось загрузить на старте, приложение не поднимается.
+  URL DataDictionary: env `DATA_DICTIONARY_URL` (по умолчанию `http://data-dictionary:8080`).
+
+> Для локального запуска, помимо PostgreSQL и Redis, должен быть доступен DataDictionary
+> с загруженной метамоделью (см. соседний проект `DataDictionary`, его `docker-compose.yml` и
+> `seed-data/metamodel-seed.json`).
+
 ## OpenAPI / Swagger
 
 Документация генерируется автоматически (springdoc-openapi) и охватывает только публичный API
