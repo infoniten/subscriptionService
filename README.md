@@ -73,6 +73,14 @@ curl -X POST http://localhost:8080/api/v1/subscribers/risk-service/subscriptions
 Подписок на пользователя, топиков на пользователя, создаваемых подписок в час, initialization в час,
 максимум полей, максимальная длина фильтра.
 
+## OpenAPI / Swagger
+
+Документация генерируется автоматически (springdoc-openapi) и охватывает только публичный API
+(`/api/v1/**`); внутренний `/internal/**` в спеку не попадает.
+
+- OpenAPI JSON: `GET /v3/api-docs`
+- Swagger UI: `GET /swagger-ui.html`
+
 ## Kubernetes probes
 
 - Liveness: `GET /actuator/health/liveness`

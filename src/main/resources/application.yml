@@ -47,6 +47,14 @@ logging:
   level:
     com.example.subscription: INFO
 
+springdoc:
+  # Only the public API is documented; internal Engine endpoints (/internal/**) are excluded.
+  paths-to-match: /api/v1/**
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
 subscription:
   topic:
     prefix: subscription
