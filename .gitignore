@@ -12,3 +12,6 @@ target/
 
 # Sibling DataDictionary service lives here as a separate git repo; not part of this project
 /DataDictionary/
+
+# Sibling Delivery Engine Batch service — separate git repo
+/delivery-engine-batch/
