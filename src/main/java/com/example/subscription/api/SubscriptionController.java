@@ -92,7 +92,7 @@ public class SubscriptionController {
             @Parameter(description = "Фильтр по постфиксу топика", example = "prod")
             @RequestParam(required = false) String topicPostfix,
             @Parameter(description = "Фильтр по режиму Engine",
-                    schema = @Schema(allowableValues = {"OBJECT_STREAM", "OBJECT_WITH_PREVIOUS", "EVENT_WITH_REMOVE"}))
+                    schema = @Schema(allowableValues = {"OBJECT_STREAM", "OBJECT_WITH_PREVIOUS", "EVENT_WITH_REMOVE", "OBJECT_BATCH"}))
             @RequestParam(required = false) String engine) {
         SubscriptionStatus statusFilter = parseStatus(status);
         EngineType engineFilter = parseEngine(engine);

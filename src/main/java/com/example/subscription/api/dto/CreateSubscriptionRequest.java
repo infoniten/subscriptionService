@@ -27,7 +27,7 @@ public record CreateSubscriptionRequest(
 
         @Schema(description = "Режим работы Engine",
                 example = "EVENT_WITH_REMOVE",
-                allowableValues = {"OBJECT_STREAM", "OBJECT_WITH_PREVIOUS", "EVENT_WITH_REMOVE"},
+                allowableValues = {"OBJECT_STREAM", "OBJECT_WITH_PREVIOUS", "EVENT_WITH_REMOVE", "OBJECT_BATCH"},
                 requiredMode = Schema.RequiredMode.REQUIRED)
         String engine
 ) {

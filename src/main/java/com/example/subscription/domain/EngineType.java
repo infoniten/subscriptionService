@@ -7,5 +7,7 @@ package com.example.subscription.domain;
 public enum EngineType {
     OBJECT_STREAM,
     OBJECT_WITH_PREVIOUS,
-    EVENT_WITH_REMOVE
+    EVENT_WITH_REMOVE,
+    /** Batch delivery handled by the Delivery Engine Batch service. */
+    OBJECT_BATCH
 }
