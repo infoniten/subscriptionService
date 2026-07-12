@@ -78,9 +78,10 @@ curl -X POST http://localhost:8080/api/v1/subscribers/risk-service/subscriptions
 Компонент валидации (`SubscriptionValidator`) на старте загружает метамодель из **DataDictionary**
 и проверяет по ней список `fields` и селекторы внутри `filter`.
 
-- Источники (оба URL конфигурируемы, `subscription.metamodel.*`):
-  - `GET /api/search-service/metadata` — классы (`sourceValue` ↔ canonical), скалярные поля, иерархия;
-  - `GET /api/metamodel/export` — связи (`relationAlias` → target-класс) для путей вида `baseCurrency.code`.
+- Источник — один эндпоинт (URL конфигурируем, `subscription.metamodel.*`):
+  - `GET /api/search-service/metadata/v3` — классы (`sourceValue` ↔ canonical), объявленные скалярные
+    поля (`declaredFields`), иерархия и связи (`relations`: `alias`/`name` → `targetClass`).
+  - Обход связей: `GLOBAL_LINK` — по `alias`, `*_SET`/`*_ITEM` — по `name`.
 - Формат поля: `Class.field` или `Class.relation.field` (обход связей), например
   `Trade.portfolioId`, `Entity.id`, `FxSpotForwardTrade.baseCurrency.code`. Наследованные поля/связи
   видны через иерархию классов.

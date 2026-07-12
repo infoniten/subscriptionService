@@ -66,8 +66,7 @@ subscription:
     base-url: ${INIT_SERVICE_URL:http://initialization-service}
   metamodel:
     base-url: ${DATA_DICTIONARY_URL:http://data-dictionary:8080}
-    metadata-path: /api/search-service/metadata
-    relations-path: /api/metamodel/export
+    metadata-path: /api/search-service/metadata/v3
   # All limits are externalized (ConfigMap / env) so they can be tuned without a code change.
   rate-limits:
     max-subscriptions-per-subscriber: 100

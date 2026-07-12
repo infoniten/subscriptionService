@@ -11,8 +11,7 @@ import com.example.subscription.service.validation.metamodel.dto.MetadataRespons
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.FieldEntry;
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.FieldsBlock;
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.Hierarchy;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse.RelationEntry;
+import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.RelationEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -48,10 +47,10 @@ class MetamodelSubscriptionValidatorTest {
                 new Hierarchy(Map.of(
                         "TRADE", List.of("TRADE"),
                         "FX_SPOT_FORWARD_TRADE", List.of("FX_SPOT_FORWARD_TRADE", "TRADE"),
-                        "CURRENCY", List.of("CURRENCY"))));
-        RelationsResponse relations = new RelationsResponse(List.of(
-                new RelationEntry("baseCurrencyId", "baseCurrency", "FxSpotForwardTrade", "Currency", "global_link")));
-        return MetamodelCatalogFactory.build(metadata, relations);
+                        "CURRENCY", List.of("CURRENCY"))),
+                Map.of("FX_SPOT_FORWARD_TRADE", List.of(
+                        new RelationEntry("baseCurrencyId", "baseCurrency", "GLOBAL_LINK", "CURRENCY"))));
+        return MetamodelCatalogFactory.build(metadata);
     }
 
     @Test

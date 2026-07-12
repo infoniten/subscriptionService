@@ -5,8 +5,7 @@ import com.example.subscription.service.validation.metamodel.dto.MetadataRespons
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.FieldEntry;
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.FieldsBlock;
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.Hierarchy;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse.RelationEntry;
+import com.example.subscription.service.validation.metamodel.dto.MetadataResponse.RelationEntry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -19,11 +18,11 @@ class MetamodelCatalogTest {
     private final MetamodelCatalog catalog = sampleCatalog();
 
     /**
-     * Sample modelled after the real metamodel:
+     * Sample modelled after the real v3 metamodel:
      * Entity(id) <- Trade(portfolioId, contractId) <- FxSpotForwardTrade(baseAmount)
      * Entity(id) <- Currency(code, name); relation FxSpotForwardTrade.baseCurrency -> Currency.
      */
-    private static MetamodelCatalog sampleCatalog() {
+    static MetamodelCatalog sampleCatalog() {
         MetadataResponse metadata = new MetadataResponse(
                 List.of(
                         new ClassEntry("ENTITY", "Entity"),
@@ -39,13 +38,11 @@ class MetamodelCatalogTest {
                         "ENTITY", List.of("ENTITY"),
                         "TRADE", List.of("TRADE", "ENTITY"),
                         "FX_SPOT_FORWARD_TRADE", List.of("FX_SPOT_FORWARD_TRADE", "TRADE", "ENTITY"),
-                        "CURRENCY", List.of("CURRENCY", "ENTITY"))));
+                        "CURRENCY", List.of("CURRENCY", "ENTITY"))),
+                Map.of("FX_SPOT_FORWARD_TRADE", List.of(
+                        new RelationEntry("baseCurrencyId", "baseCurrency", "GLOBAL_LINK", "CURRENCY"))));
 
-        RelationsResponse relations = new RelationsResponse(List.of(
-                new RelationEntry("baseCurrencyId", "baseCurrency",
-                        "FxSpotForwardTrade", "Currency", "global_link")));
-
-        return MetamodelCatalogFactory.build(metadata, relations);
+        return MetamodelCatalogFactory.build(metadata);
     }
 
     private static FieldsBlock block(String... names) {
@@ -62,7 +59,6 @@ class MetamodelCatalogTest {
 
     @Test
     void acceptsInheritedField() {
-        // portfolioId from Trade, id from Entity — both visible on FxSpotForwardTrade
         assertThat(catalog.validateFieldPath("FxSpotForwardTrade.portfolioId")).isEmpty();
         assertThat(catalog.validateFieldPath("FxSpotForwardTrade.id")).isEmpty();
     }
@@ -91,7 +87,6 @@ class MetamodelCatalogTest {
 
     @Test
     void rejectsRelationUsedAsLeaf() {
-        // baseCurrency is a relation, not a scalar field — cannot be selected directly
         assertThat(catalog.validateFieldPath("FxSpotForwardTrade.baseCurrency"))
                 .get().asString().contains("unknown field");
     }

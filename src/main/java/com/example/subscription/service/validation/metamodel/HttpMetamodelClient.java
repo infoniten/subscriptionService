@@ -2,7 +2,6 @@ package com.example.subscription.service.validation.metamodel;
 
 import com.example.subscription.config.SubscriptionProperties;
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,23 +23,22 @@ public class HttpMetamodelClient implements MetamodelClient {
 
     @Override
     public MetamodelCatalog fetchCatalog() {
-        MetadataResponse metadata = fetch(props.getMetadataPath(), MetadataResponse.class);
-        RelationsResponse relations = fetch(props.getRelationsPath(), RelationsResponse.class);
+        MetadataResponse metadata = fetch(props.getMetadataPath());
 
         if (metadata == null || metadata.classes() == null || metadata.classes().isEmpty()) {
             throw new MetamodelUnavailableException(
                     "metadata response from " + props.getMetadataPath() + " is empty", null);
         }
 
-        MetamodelCatalog catalog = MetamodelCatalogFactory.build(metadata, relations);
-        log.info("Loaded metamodel from DataDictionary ({}): {} classes",
-                props.getBaseUrl(), catalog.classCount());
+        MetamodelCatalog catalog = MetamodelCatalogFactory.build(metadata);
+        log.info("Loaded metamodel from DataDictionary ({}{}): {} classes",
+                props.getBaseUrl(), props.getMetadataPath(), catalog.classCount());
         return catalog;
     }
 
-    private <T> T fetch(String path, Class<T> type) {
+    private MetadataResponse fetch(String path) {
         try {
-            return restClient.get().uri(path).retrieve().body(type);
+            return restClient.get().uri(path).retrieve().body(MetadataResponse.class);
         } catch (RestClientException e) {
             throw new MetamodelUnavailableException(
                     "failed to fetch " + props.getBaseUrl() + path, e);

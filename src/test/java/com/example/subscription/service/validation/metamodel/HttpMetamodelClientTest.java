@@ -2,7 +2,6 @@ package com.example.subscription.service.validation.metamodel;
 
 import com.example.subscription.config.SubscriptionProperties;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -16,8 +15,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class HttpMetamodelClientTest {
 
     private static final String BASE = "http://data-dictionary:8080";
+    private static final String PATH = "/api/search-service/metadata/v3";
 
-    private static final String METADATA_JSON = """
+    // Shape mirrors the real v3 response: declaredFields + relations keyed by canonical class.
+    private static final String V3_JSON = """
             {
               "classes": [
                 {"name": "TRADE", "sourceValue": "Trade"},
@@ -25,9 +26,9 @@ class HttpMetamodelClientTest {
                 {"name": "CURRENCY", "sourceValue": "Currency"}
               ],
               "fields": {
-                "TRADE": {"mainFields": [], "indexFields": [], "jsonFields": [{"name": "portfolioId", "type": "LONG"}]},
-                "FX_SPOT_FORWARD_TRADE": {"jsonFields": [{"name": "baseAmount", "type": "DECIMAL"}]},
-                "CURRENCY": {"jsonFields": [{"name": "code", "type": "STRING"}]}
+                "TRADE": {"mainFields": [], "columnsFields": [], "declaredFields": [{"name": "portfolioId", "type": "LONG"}]},
+                "FX_SPOT_FORWARD_TRADE": {"declaredFields": [{"name": "baseAmount", "type": "DECIMAL"}, {"name": "baseCurrencyId", "type": "LONG"}]},
+                "CURRENCY": {"declaredFields": [{"name": "code", "type": "STRING"}]}
               },
               "hierarchy": {
                 "parentsOrSelf": {
@@ -35,16 +36,13 @@ class HttpMetamodelClientTest {
                   "FX_SPOT_FORWARD_TRADE": ["FX_SPOT_FORWARD_TRADE", "TRADE"],
                   "CURRENCY": ["CURRENCY"]
                 }
-              }
-            }""";
-
-    private static final String RELATIONS_JSON = """
-            {
-              "relations": [
-                {"relationName": "baseCurrencyId", "relationAlias": "baseCurrency",
-                 "sourceClassName": "FxSpotForwardTrade", "targetClassName": "Currency",
-                 "relationType": "global_link"}
-              ]
+              },
+              "relations": {
+                "FX_SPOT_FORWARD_TRADE": [
+                  {"name": "baseCurrencyId", "alias": "baseCurrency", "type": "GLOBAL_LINK", "targetClass": "CURRENCY"}
+                ]
+              },
+              "enumTypes": {}
             }""";
 
     private SubscriptionProperties props() {
@@ -54,13 +52,11 @@ class HttpMetamodelClientTest {
     }
 
     @Test
-    void fetchesBothEndpointsAndBuildsCatalog() {
+    void fetchesSingleEndpointAndBuildsCatalog() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo(BASE + "/api/search-service/metadata"))
-                .andRespond(withSuccess(METADATA_JSON, MediaType.APPLICATION_JSON));
-        server.expect(requestTo(BASE + "/api/metamodel/export"))
-                .andRespond(withSuccess(RELATIONS_JSON, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + PATH))
+                .andRespond(withSuccess(V3_JSON, MediaType.APPLICATION_JSON));
 
         HttpMetamodelClient client = new HttpMetamodelClient(builder, props());
         MetamodelCatalog catalog = client.fetchCatalog();
@@ -76,8 +72,7 @@ class HttpMetamodelClientTest {
     void throwsMetamodelUnavailableOnServerError() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo(BASE + "/api/search-service/metadata"))
-                .andRespond(withServerError());
+        server.expect(requestTo(BASE + PATH)).andRespond(withServerError());
 
         HttpMetamodelClient client = new HttpMetamodelClient(builder, props());
         assertThatThrownBy(client::fetchCatalog)
@@ -88,10 +83,8 @@ class HttpMetamodelClientTest {
     void throwsWhenMetadataEmpty() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo(BASE + "/api/search-service/metadata"))
+        server.expect(requestTo(BASE + PATH))
                 .andRespond(withSuccess("{\"classes\": []}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(BASE + "/api/metamodel/export"))
-                .andRespond(withSuccess("{\"relations\": []}", MediaType.APPLICATION_JSON));
 
         HttpMetamodelClient client = new HttpMetamodelClient(builder, props());
         assertThatThrownBy(client::fetchCatalog)

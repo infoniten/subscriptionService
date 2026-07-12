@@ -96,16 +96,14 @@ public class SubscriptionProperties {
 
     /**
      * DataDictionary integration used by the field/filter validator. The metamodel is loaded once
-     * at startup (fail-fast). Scalar fields + hierarchy come from {@code metadataPath}; relations
-     * (for reference-traversal paths like {@code baseCurrency.code}) come from {@code relationsPath}.
+     * at startup (fail-fast) from a single v3 endpoint that carries classes, declared scalar fields,
+     * the hierarchy and relations (for reference-traversal paths like {@code baseCurrency.code}).
      */
     public static class Metamodel {
         /** Base URL of the DataDictionary service. */
         private String baseUrl = "http://data-dictionary:8080";
-        /** Search-service metadata export (classes, scalar fields, hierarchy). */
-        private String metadataPath = "/api/search-service/metadata";
-        /** Full metamodel export — used only to read relations (alias -> target class). */
-        private String relationsPath = "/api/metamodel/export";
+        /** Search-service v3 metadata export (classes, fields, hierarchy, relations). */
+        private String metadataPath = "/api/search-service/metadata/v3";
 
         public String getBaseUrl() {
             return baseUrl;
@@ -121,14 +119,6 @@ public class SubscriptionProperties {
 
         public void setMetadataPath(String metadataPath) {
             this.metadataPath = metadataPath;
-        }
-
-        public String getRelationsPath() {
-            return relationsPath;
-        }
-
-        public void setRelationsPath(String relationsPath) {
-            this.relationsPath = relationsPath;
         }
     }
 

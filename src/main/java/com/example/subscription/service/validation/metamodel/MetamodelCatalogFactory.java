@@ -1,7 +1,6 @@
 package com.example.subscription.service.validation.metamodel;
 
 import com.example.subscription.service.validation.metamodel.dto.MetadataResponse;
-import com.example.subscription.service.validation.metamodel.dto.RelationsResponse;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -10,27 +9,25 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Assembles an immutable {@link MetamodelCatalog} from the two DataDictionary responses:
- * scalar fields + hierarchy from the search-service metadata, and relations from the metamodel
- * export. The two are bridged by the class {@code sourceValue} (framework class name).
+ * Assembles an immutable {@link MetamodelCatalog} from the single DataDictionary v3 metadata
+ * response, which already carries classes, declared scalar fields, the hierarchy and relations
+ * (with canonical target classes).
  */
 public final class MetamodelCatalogFactory {
 
     private MetamodelCatalogFactory() {
     }
 
-    public static MetamodelCatalog build(MetadataResponse metadata, RelationsResponse relations) {
+    public static MetamodelCatalog build(MetadataResponse metadata) {
         Map<String, String> sourceValueToCanonical = new HashMap<>();
         Map<String, String> canonicalToSourceValue = new HashMap<>();
         if (metadata.classes() != null) {
             for (MetadataResponse.ClassEntry c : metadata.classes()) {
-                if (c.name() == null) {
+                if (c.name() == null || c.sourceValue() == null) {
                     continue;
                 }
-                if (c.sourceValue() != null) {
-                    sourceValueToCanonical.put(c.sourceValue(), c.name());
-                    canonicalToSourceValue.put(c.name(), c.sourceValue());
-                }
+                sourceValueToCanonical.put(c.sourceValue(), c.name());
+                canonicalToSourceValue.put(c.name(), c.sourceValue());
             }
         }
 
@@ -39,8 +36,8 @@ public final class MetamodelCatalogFactory {
             for (Map.Entry<String, MetadataResponse.FieldsBlock> e : metadata.fields().entrySet()) {
                 Set<String> names = new LinkedHashSet<>();
                 MetadataResponse.FieldsBlock block = e.getValue();
-                if (block != null && block.jsonFields() != null) {
-                    for (MetadataResponse.FieldEntry f : block.jsonFields()) {
+                if (block != null && block.declaredFields() != null) {
+                    for (MetadataResponse.FieldEntry f : block.declaredFields()) {
                         if (f.name() != null) {
                             names.add(f.name());
                         }
@@ -55,18 +52,23 @@ public final class MetamodelCatalogFactory {
             parentsOrSelf.putAll(metadata.hierarchy().parentsOrSelf());
         }
 
+        // relations are keyed by canonical source class; targetClass is already canonical.
         Map<String, Map<String, String>> relationsByCanonical = new HashMap<>();
-        if (relations != null && relations.relations() != null) {
-            for (RelationsResponse.RelationEntry r : relations.relations()) {
-                String sourceCanonical = sourceValueToCanonical.get(r.sourceClassName());
-                String targetCanonical = sourceValueToCanonical.get(r.targetClassName());
-                String alias = r.pathName();
-                if (sourceCanonical == null || targetCanonical == null || alias == null) {
+        if (metadata.relations() != null) {
+            for (Map.Entry<String, List<MetadataResponse.RelationEntry>> e : metadata.relations().entrySet()) {
+                if (e.getValue() == null) {
                     continue;
                 }
-                relationsByCanonical
-                        .computeIfAbsent(sourceCanonical, k -> new HashMap<>())
-                        .put(alias, targetCanonical);
+                Map<String, String> byAlias = new HashMap<>();
+                for (MetadataResponse.RelationEntry r : e.getValue()) {
+                    String alias = r.pathName();
+                    if (alias != null && r.targetClass() != null) {
+                        byAlias.put(alias, r.targetClass());
+                    }
+                }
+                if (!byAlias.isEmpty()) {
+                    relationsByCanonical.put(e.getKey(), byAlias);
+                }
             }
         }
 
