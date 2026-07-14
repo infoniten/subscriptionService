@@ -28,17 +28,21 @@ class MetamodelCatalogTest {
                         new ClassEntry("ENTITY", "Entity"),
                         new ClassEntry("TRADE", "Trade"),
                         new ClassEntry("FX_SPOT_FORWARD_TRADE", "FxSpotForwardTrade"),
-                        new ClassEntry("CURRENCY", "Currency")),
+                        new ClassEntry("CURRENCY", "Currency"),
+                        // CryptoCurrency is a subtype of Currency, declaring its own field `network`.
+                        new ClassEntry("CRYPTO_CURRENCY", "CryptoCurrency")),
                 Map.of(
                         "ENTITY", block("id"),
                         "TRADE", block("portfolioId", "contractId"),
                         "FX_SPOT_FORWARD_TRADE", block("baseAmount"),
-                        "CURRENCY", block("code", "name")),
+                        "CURRENCY", block("code", "name"),
+                        "CRYPTO_CURRENCY", block("network")),
                 new Hierarchy(Map.of(
                         "ENTITY", List.of("ENTITY"),
                         "TRADE", List.of("TRADE", "ENTITY"),
                         "FX_SPOT_FORWARD_TRADE", List.of("FX_SPOT_FORWARD_TRADE", "TRADE", "ENTITY"),
-                        "CURRENCY", List.of("CURRENCY", "ENTITY"))),
+                        "CURRENCY", List.of("CURRENCY", "ENTITY"),
+                        "CRYPTO_CURRENCY", List.of("CRYPTO_CURRENCY", "CURRENCY", "ENTITY"))),
                 Map.of("FX_SPOT_FORWARD_TRADE", List.of(
                         new RelationEntry("baseCurrencyId", "baseCurrency", "GLOBAL_LINK", "CURRENCY"))));
 
@@ -67,6 +71,20 @@ class MetamodelCatalogTest {
     void acceptsRelationTraversal() {
         assertThat(catalog.validateFieldPath("FxSpotForwardTrade.baseCurrency.code")).isEmpty();
         assertThat(catalog.validateFieldPath("FxSpotForwardTrade.baseCurrency.name")).isEmpty();
+    }
+
+    @Test
+    void acceptsSubtypeFieldThroughRelation() {
+        // `network` is declared only on CryptoCurrency, a subtype of the relation target Currency.
+        // Because a GLOBAL_LINK/EMBEDDED_SET may hold any concrete subtype, this must validate.
+        assertThat(catalog.validateFieldPath("FxSpotForwardTrade.baseCurrency.network")).isEmpty();
+    }
+
+    @Test
+    void doesNotExpandSubtypesForRootClass() {
+        // The root class is explicitly chosen by the caller, so a subtype-only field must NOT leak in.
+        assertThat(catalog.validateFieldPath("Currency.network"))
+                .get().asString().contains("unknown field");
     }
 
     @Test

@@ -52,6 +52,25 @@ public final class MetamodelCatalogFactory {
             parentsOrSelf.putAll(metadata.hierarchy().parentsOrSelf());
         }
 
+        // Invert parentsOrSelf into subtypesOrSelf: for every class D whose ancestor chain contains
+        // A, D is a subtype-or-self of A. Used to validate polymorphic relation targets (an embedded
+        // set / link declared as type T may hold any concrete subtype of T).
+        Map<String, Set<String>> subtypesBuilder = new HashMap<>();
+        for (Map.Entry<String, List<String>> e : parentsOrSelf.entrySet()) {
+            String descendant = e.getKey();
+            List<String> ancestorsOrSelf = e.getValue();
+            if (ancestorsOrSelf == null) {
+                continue;
+            }
+            for (String ancestor : ancestorsOrSelf) {
+                subtypesBuilder.computeIfAbsent(ancestor, k -> new LinkedHashSet<>()).add(descendant);
+            }
+        }
+        Map<String, List<String>> subtypesOrSelf = new HashMap<>();
+        for (Map.Entry<String, Set<String>> e : subtypesBuilder.entrySet()) {
+            subtypesOrSelf.put(e.getKey(), List.copyOf(e.getValue()));
+        }
+
         // relations are keyed by canonical source class; targetClass is already canonical.
         Map<String, Map<String, String>> relationsByCanonical = new HashMap<>();
         if (metadata.relations() != null) {
@@ -77,6 +96,7 @@ public final class MetamodelCatalogFactory {
                 Map.copyOf(canonicalToSourceValue),
                 Map.copyOf(scalarFieldsByCanonical),
                 Map.copyOf(parentsOrSelf),
+                Map.copyOf(subtypesOrSelf),
                 Map.copyOf(relationsByCanonical));
     }
 }

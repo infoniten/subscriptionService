@@ -1,5 +1,6 @@
 package com.example.subscription.service.validation.metamodel;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,17 +23,20 @@ public final class MetamodelCatalog {
     private final Map<String, String> canonicalToSourceValue;
     private final Map<String, Set<String>> scalarFieldsByCanonical;
     private final Map<String, List<String>> parentsOrSelf;
+    private final Map<String, List<String>> subtypesOrSelf;
     private final Map<String, Map<String, String>> relationsByCanonical;
 
     MetamodelCatalog(Map<String, String> sourceValueToCanonical,
                      Map<String, String> canonicalToSourceValue,
                      Map<String, Set<String>> scalarFieldsByCanonical,
                      Map<String, List<String>> parentsOrSelf,
+                     Map<String, List<String>> subtypesOrSelf,
                      Map<String, Map<String, String>> relationsByCanonical) {
         this.sourceValueToCanonical = sourceValueToCanonical;
         this.canonicalToSourceValue = canonicalToSourceValue;
         this.scalarFieldsByCanonical = scalarFieldsByCanonical;
         this.parentsOrSelf = parentsOrSelf;
+        this.subtypesOrSelf = subtypesOrSelf;
         this.relationsByCanonical = relationsByCanonical;
     }
 
@@ -60,21 +64,28 @@ public final class MetamodelCatalog {
         }
 
         String current = canonical;
+        // Once a segment traverses a relation, the value it points at is polymorphic: an
+        // EMBEDDED_SET/GLOBAL_LINK declared as type T can hold any concrete subtype of T at runtime.
+        // From that point on, resolve fields/relations against T's subtree (ancestors + subtypes),
+        // not only its inheritance chain. The root class is not expanded — the caller qualified it
+        // explicitly (e.g. FxSpotForwardTrade vs Trade).
+        boolean polymorphic = false;
         for (int i = 1; i < parts.length; i++) {
             String segment = parts[i];
             boolean last = i == parts.length - 1;
             if (last) {
-                if (!hasScalarField(current, segment)) {
+                if (!hasScalarField(current, segment, polymorphic)) {
                     return Optional.of("unknown field '" + segment + "' on class '"
                             + sourceValueOf(current) + "' in '" + rawPath + "'");
                 }
             } else {
-                String target = resolveRelationTarget(current, segment);
+                String target = resolveRelationTarget(current, segment, polymorphic);
                 if (target == null) {
                     return Optional.of("unknown relation '" + segment + "' on class '"
                             + sourceValueOf(current) + "' in '" + rawPath + "'");
                 }
                 current = target;
+                polymorphic = true;
             }
         }
         return Optional.empty();
@@ -89,9 +100,9 @@ public final class MetamodelCatalog {
         return scalarFieldsByCanonical.containsKey(token) ? token : null;
     }
 
-    private boolean hasScalarField(String canonical, String field) {
-        for (String ancestor : chain(canonical)) {
-            Set<String> fields = scalarFieldsByCanonical.get(ancestor);
+    private boolean hasScalarField(String canonical, String field, boolean includeSubtypes) {
+        for (String related : resolutionClasses(canonical, includeSubtypes)) {
+            Set<String> fields = scalarFieldsByCanonical.get(related);
             if (fields != null && fields.contains(field)) {
                 return true;
             }
@@ -99,9 +110,9 @@ public final class MetamodelCatalog {
         return false;
     }
 
-    private String resolveRelationTarget(String canonical, String alias) {
-        for (String ancestor : chain(canonical)) {
-            Map<String, String> relations = relationsByCanonical.get(ancestor);
+    private String resolveRelationTarget(String canonical, String alias, boolean includeSubtypes) {
+        for (String related : resolutionClasses(canonical, includeSubtypes)) {
+            Map<String, String> relations = relationsByCanonical.get(related);
             if (relations != null && relations.containsKey(alias)) {
                 return relations.get(alias);
             }
@@ -109,9 +120,27 @@ public final class MetamodelCatalog {
         return null;
     }
 
+    /**
+     * Classes whose declared members are visible on {@code canonical}: always its inheritance chain
+     * (self + ancestors); plus, when {@code includeSubtypes} is set (i.e. we arrived here via a
+     * relation and the runtime object may be a concrete subtype), all of its subtypes.
+     */
+    private Set<String> resolutionClasses(String canonical, boolean includeSubtypes) {
+        Set<String> classes = new LinkedHashSet<>(chain(canonical));
+        if (includeSubtypes) {
+            classes.addAll(subtypes(canonical));
+        }
+        return classes;
+    }
+
     private List<String> chain(String canonical) {
         List<String> chain = parentsOrSelf.get(canonical);
         return chain != null && !chain.isEmpty() ? chain : List.of(canonical);
+    }
+
+    private List<String> subtypes(String canonical) {
+        List<String> subtypes = subtypesOrSelf.get(canonical);
+        return subtypes != null && !subtypes.isEmpty() ? subtypes : List.of(canonical);
     }
 
     private String sourceValueOf(String canonical) {
