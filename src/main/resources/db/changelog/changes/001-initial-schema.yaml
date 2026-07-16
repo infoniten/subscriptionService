@@ -1,0 +1,117 @@
+databaseChangeLog:
+  # ==================== TABLE: subscription ====================
+  - changeSet:
+      id: 001-create-subscription
+      author: system
+      comment: PostgreSQL is the single source of truth for subscription configuration
+      changes:
+        - createTable:
+            tableName: subscription
+            columns:
+              - column:
+                  name: id
+                  type: varchar(64)
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_subscription
+                    nullable: false
+              - column:
+                  name: subscriber_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: topic_postfix
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: engine
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: filter
+                  type: text
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: failure_reason
+                  type: varchar(255)
+              - column:
+                  name: failure_message
+                  type: text
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+
+  # ==================== TABLE: subscription_fields ====================
+  - changeSet:
+      id: 001-create-subscription-fields
+      author: system
+      comment: Ordered list of returned fields per subscription
+      changes:
+        - createTable:
+            tableName: subscription_fields
+            columns:
+              - column:
+                  name: subscription_id
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_subscription_fields_subscription
+                    references: subscription(id)
+                    deleteCascade: true
+              - column:
+                  name: field_name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: field_order
+                  type: int
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: subscription_fields
+            columnNames: subscription_id, field_order
+            constraintName: pk_subscription_fields
+
+  # ==================== INDEXES ====================
+  - changeSet:
+      id: 001-create-subscription-indexes
+      author: system
+      comment: Lookup indexes for subscriber / status / topic queries
+      changes:
+        - createIndex:
+            tableName: subscription
+            indexName: idx_subscription_subscriber
+            columns:
+              - column:
+                  name: subscriber_name
+        - createIndex:
+            tableName: subscription
+            indexName: idx_subscription_subscriber_status
+            columns:
+              - column:
+                  name: subscriber_name
+              - column:
+                  name: status
+        - createIndex:
+            tableName: subscription
+            indexName: idx_subscription_subscriber_topic
+            columns:
+              - column:
+                  name: subscriber_name
+              - column:
+                  name: topic_postfix
