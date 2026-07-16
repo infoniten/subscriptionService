@@ -91,6 +91,21 @@ public final class MetamodelCatalog {
         return Optional.empty();
     }
 
+    /** Resolves a class token (sourceValue or canonical) to its canonical name, if known. */
+    public Optional<String> canonicalOf(String token) {
+        return token == null ? Optional.empty() : Optional.ofNullable(resolveClass(token));
+    }
+
+    /** True if {@code ancestorCanonical} is {@code canonical} or one of its ancestors. */
+    public boolean isAncestorOrSelf(String ancestorCanonical, String canonical) {
+        return chain(canonical).contains(ancestorCanonical);
+    }
+
+    /** True if {@code subtypeCanonical} is {@code canonical} or one of its subtypes. */
+    public boolean isSubtypeOrSelf(String subtypeCanonical, String canonical) {
+        return subtypes(canonical).contains(subtypeCanonical);
+    }
+
     /** Resolves a class token (by sourceValue, or a canonical name) to its canonical name. */
     private String resolveClass(String token) {
         String canonical = sourceValueToCanonical.get(token);

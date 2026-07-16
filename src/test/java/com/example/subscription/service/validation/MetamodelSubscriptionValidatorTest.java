@@ -2,6 +2,7 @@ package com.example.subscription.service.validation;
 
 import com.example.subscription.api.error.ErrorCode;
 import com.example.subscription.domain.EngineType;
+import com.example.subscription.domain.SubscriptionTarget;
 import com.example.subscription.exception.ValidationException;
 import com.example.subscription.service.validation.metamodel.MetamodelCatalog;
 import com.example.subscription.service.validation.metamodel.MetamodelCatalogFactory;
@@ -26,6 +27,9 @@ import static org.mockito.Mockito.when;
 class MetamodelSubscriptionValidatorTest {
 
     private MetamodelSubscriptionValidator validator;
+
+    private static final List<SubscriptionTarget> FX_SUBTREE =
+            List.of(new SubscriptionTarget("FxSpotForwardTrade", true));
 
     @BeforeEach
     void setUp() {
@@ -54,16 +58,37 @@ class MetamodelSubscriptionValidatorTest {
     }
 
     @Test
-    void acceptsValidFieldsAndFilter() {
-        assertThatCode(() -> validator.validate("risk", EngineType.EVENT_WITH_REMOVE,
+    void acceptsValidTargetsFieldsAndFilter() {
+        assertThatCode(() -> validator.validate("risk", EngineType.EVENT_WITH_REMOVE, FX_SUBTREE,
                 "Trade.portfolioId==6052",
                 List.of("FxSpotForwardTrade.baseAmount", "FxSpotForwardTrade.baseCurrency.code", "Trade.portfolioId")))
                 .doesNotThrowAnyException();
     }
 
     @Test
+    void rejectsUnknownObjectClass() {
+        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM,
+                List.of(new SubscriptionTarget("NoSuchClass", true)), null, List.of("Trade.portfolioId")))
+                .isInstanceOf(ValidationException.class)
+                .extracting(e -> ((ValidationException) e).getCode())
+                .isEqualTo(ErrorCode.INVALID_TARGETS);
+    }
+
+    @Test
+    void rejectsFieldNotApplicableToExactTarget() {
+        // EXACT target Currency: a Trade/FxSpot field is not applicable (its class is not an
+        // ancestor-or-self of Currency).
+        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM,
+                List.of(new SubscriptionTarget("Currency", false)), null,
+                List.of("Currency.code", "Trade.portfolioId")))
+                .isInstanceOf(ValidationException.class)
+                .extracting(e -> ((ValidationException) e).getCode())
+                .isEqualTo(ErrorCode.INVALID_FIELDS);
+    }
+
+    @Test
     void rejectsUnknownFieldWithInvalidFields() {
-        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM, null,
+        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM, FX_SUBTREE, null,
                 List.of("Trade.portfolioId", "Trade.wrongField")))
                 .isInstanceOf(ValidationException.class)
                 .extracting(e -> ((ValidationException) e).getCode())
@@ -72,7 +97,7 @@ class MetamodelSubscriptionValidatorTest {
 
     @Test
     void rejectsUnknownFilterSelectorWithInvalidFilter() {
-        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM,
+        assertThatThrownBy(() -> validator.validate("risk", EngineType.OBJECT_STREAM, FX_SUBTREE,
                 "Trade.doesNotExist==1", List.of("Trade.portfolioId")))
                 .isInstanceOf(ValidationException.class)
                 .extracting(e -> ((ValidationException) e).getCode())
@@ -81,7 +106,7 @@ class MetamodelSubscriptionValidatorTest {
 
     @Test
     void acceptsNullFilter() {
-        assertThatCode(() -> validator.validate("risk", EngineType.OBJECT_STREAM, null,
+        assertThatCode(() -> validator.validate("risk", EngineType.OBJECT_STREAM, FX_SUBTREE, null,
                 List.of("Trade.portfolioId")))
                 .doesNotThrowAnyException();
     }

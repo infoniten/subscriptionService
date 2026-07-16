@@ -47,7 +47,8 @@ class QuotaServiceTest {
     private CreateSubscriptionRequest request(int fields, int filterLen) {
         List<String> f = IntStream.range(0, fields).mapToObj(i -> "f" + i).collect(Collectors.toList());
         String filter = "x".repeat(filterLen);
-        return new CreateSubscriptionRequest("prod", f, filter, "OBJECT_STREAM");
+        return new CreateSubscriptionRequest("prod",
+                List.of(new CreateSubscriptionRequest.TargetRequest("Trade", true)), f, filter, "OBJECT_STREAM");
     }
 
     @Test

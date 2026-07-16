@@ -1,0 +1,44 @@
+databaseChangeLog:
+  # ==================== TABLE: subscription_target ====================
+  - changeSet:
+      id: 002-create-subscription-target
+      author: system
+      comment: Multi-class targets per subscription (objectClass + polymorphism flag)
+      changes:
+        - createTable:
+            tableName: subscription_target
+            columns:
+              - column:
+                  name: subscription_id
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_subscription_target_subscription
+                    references: subscription(id)
+                    deleteCascade: true
+              - column:
+                  name: object_class
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: include_subclasses
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_order
+                  type: int
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: subscription_target
+            columnNames: subscription_id, target_order
+            constraintName: pk_subscription_target
+        - createIndex:
+            tableName: subscription_target
+            indexName: idx_subscription_target_class
+            columns:
+              - column:
+                  name: object_class

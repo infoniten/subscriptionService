@@ -4,6 +4,7 @@ import com.example.subscription.api.dto.CreateSubscriptionRequest;
 import com.example.subscription.domain.EngineType;
 import com.example.subscription.domain.Subscription;
 import com.example.subscription.domain.SubscriptionStatus;
+import com.example.subscription.domain.SubscriptionTarget;
 import com.example.subscription.exception.InvalidStatusException;
 import com.example.subscription.exception.SubscriptionNotFoundException;
 import com.example.subscription.repository.SubscriptionRepository;
@@ -72,8 +73,13 @@ public class SubscriptionService {
         inputParser.validateSubscriberName(subscriberName);
         EngineType engine = inputParser.parseAndValidate(request);
 
-        // Semantic validation (RSQL/fields) — currently a stub that accepts everything.
-        validator.validate(subscriberName, engine, request.filter(), request.fields());
+        // Build targets applying the includeSubclasses default (true) before semantic validation.
+        List<SubscriptionTarget> targets = request.targets().stream()
+                .map(t -> new SubscriptionTarget(t.objectClass(), t.includeSubclassesOrDefault()))
+                .toList();
+
+        // Semantic validation (targets/fields/filter against the metamodel).
+        validator.validate(subscriberName, engine, targets, request.filter(), request.fields());
 
         quotaService.checkAndReserveForCreate(subscriberName, request);
 
@@ -84,6 +90,7 @@ public class SubscriptionService {
                 engine,
                 request.filter(),
                 request.fields(),
+                targets,
                 SubscriptionStatus.ACTIVE);
         subscription = repository.save(subscription);
 

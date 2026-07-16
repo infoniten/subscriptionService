@@ -52,6 +52,11 @@ public class Subscription {
     @Column(name = "field_name", nullable = false)
     private List<String> fields = new ArrayList<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "subscription_target", joinColumns = @JoinColumn(name = "subscription_id"))
+    @OrderColumn(name = "target_order")
+    private List<SubscriptionTarget> targets = new ArrayList<>();
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private SubscriptionStatus status;
@@ -78,6 +83,7 @@ public class Subscription {
                         EngineType engine,
                         String filter,
                         List<String> fields,
+                        List<SubscriptionTarget> targets,
                         SubscriptionStatus status) {
         this.id = id;
         this.subscriberName = subscriberName;
@@ -85,6 +91,7 @@ public class Subscription {
         this.engine = engine;
         this.filter = filter;
         this.fields = fields == null ? new ArrayList<>() : new ArrayList<>(fields);
+        this.targets = targets == null ? new ArrayList<>() : new ArrayList<>(targets);
         this.status = status;
     }
 
@@ -140,6 +147,10 @@ public class Subscription {
 
     public List<String> getFields() {
         return fields;
+    }
+
+    public List<SubscriptionTarget> getTargets() {
+        return targets;
     }
 
     public SubscriptionStatus getStatus() {

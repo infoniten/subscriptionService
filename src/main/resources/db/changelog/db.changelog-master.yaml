@@ -2,3 +2,7 @@ databaseChangeLog:
   # Initial schema (ported from the former Flyway V1__init.sql): subscription + subscription_fields.
   - include:
       file: db/changelog/changes/001-initial-schema.yaml
+
+  # Multi-class targets (objectClass + includeSubclasses) per subscription.
+  - include:
+      file: db/changelog/changes/002-subscription-target.yaml

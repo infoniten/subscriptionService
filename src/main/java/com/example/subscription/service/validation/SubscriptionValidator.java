@@ -1,6 +1,7 @@
 package com.example.subscription.service.validation;
 
 import com.example.subscription.domain.EngineType;
+import com.example.subscription.domain.SubscriptionTarget;
 
 import java.util.List;
 
@@ -17,5 +18,6 @@ public interface SubscriptionValidator {
      * Validates the semantic correctness of a subscription (filter/fields against the model).
      * Throws {@link com.example.subscription.exception.ValidationException} on failure.
      */
-    void validate(String subscriberName, EngineType engine, String filter, List<String> fields);
+    void validate(String subscriberName, EngineType engine,
+                  List<SubscriptionTarget> targets, String filter, List<String> fields);
 }

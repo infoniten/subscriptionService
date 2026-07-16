@@ -3,6 +3,7 @@ package com.example.subscription.repository;
 import com.example.subscription.domain.EngineType;
 import com.example.subscription.domain.Subscription;
 import com.example.subscription.domain.SubscriptionStatus;
+import com.example.subscription.domain.SubscriptionTarget;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -20,7 +21,7 @@ class SubscriptionRepositoryTest {
     private Subscription sub(String id, String subscriber, String postfix,
                              EngineType engine, SubscriptionStatus status) {
         return new Subscription(id, subscriber, postfix, engine, "f==1",
-                List.of("a", "b"), status);
+                List.of("a", "b"), List.of(new SubscriptionTarget("Trade", true)), status);
     }
 
     @Test

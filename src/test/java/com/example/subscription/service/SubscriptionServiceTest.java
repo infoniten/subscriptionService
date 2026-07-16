@@ -2,9 +2,11 @@ package com.example.subscription.service;
 
 import com.example.subscription.api.dto.CreateSubscriptionRequest;
 import com.example.subscription.config.SubscriptionProperties;
+import com.example.subscription.api.dto.CreateSubscriptionRequest.TargetRequest;
 import com.example.subscription.domain.EngineType;
 import com.example.subscription.domain.Subscription;
 import com.example.subscription.domain.SubscriptionStatus;
+import com.example.subscription.domain.SubscriptionTarget;
 import com.example.subscription.exception.InvalidStatusException;
 import com.example.subscription.exception.RedisUnavailableException;
 import com.example.subscription.exception.SubscriptionNotFoundException;
@@ -65,7 +67,9 @@ class SubscriptionServiceTest {
     }
 
     private CreateSubscriptionRequest validRequest() {
-        return new CreateSubscriptionRequest("prod", List.of("dealId", "portfolioId"),
+        return new CreateSubscriptionRequest("prod",
+                List.of(new TargetRequest("FxSpotForwardTrade", true)),
+                List.of("dealId", "portfolioId"),
                 "portfolioId==P1", "EVENT_WITH_REMOVE");
     }
 
@@ -88,7 +92,7 @@ class SubscriptionServiceTest {
     @Test
     void createRejectsUnsupportedEngine() {
         CreateSubscriptionRequest bad = new CreateSubscriptionRequest(
-                "prod", List.of("dealId"), null, "NOPE");
+                "prod", List.of(new TargetRequest("Trade", true)), List.of("dealId"), null, "NOPE");
         assertThatThrownBy(() -> service.create("risk-service", bad))
                 .isInstanceOf(ValidationException.class);
         verify(repository, never()).save(any());
@@ -199,6 +203,7 @@ class SubscriptionServiceTest {
 
     private Subscription active(String id, String subscriber) {
         return new Subscription(id, subscriber, "prod", EngineType.EVENT_WITH_REMOVE,
-                "portfolioId==P1", List.of("dealId"), SubscriptionStatus.ACTIVE);
+                "portfolioId==P1", List.of("dealId"),
+                List.of(new SubscriptionTarget("FxSpotForwardTrade", true)), SubscriptionStatus.ACTIVE);
     }
 }

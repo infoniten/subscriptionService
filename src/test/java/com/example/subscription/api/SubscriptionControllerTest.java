@@ -3,6 +3,7 @@ package com.example.subscription.api;
 import com.example.subscription.domain.EngineType;
 import com.example.subscription.domain.Subscription;
 import com.example.subscription.domain.SubscriptionStatus;
+import com.example.subscription.domain.SubscriptionTarget;
 import com.example.subscription.exception.InvalidStatusException;
 import com.example.subscription.exception.QuotaExceededException;
 import com.example.subscription.exception.RedisUnavailableException;
@@ -38,7 +39,8 @@ class SubscriptionControllerTest {
 
     private Subscription sample(SubscriptionStatus status) {
         Subscription s = new Subscription("sub-1", "risk-service", "prod",
-                EngineType.EVENT_WITH_REMOVE, "portfolioId==P1", List.of("dealId"), status);
+                EngineType.EVENT_WITH_REMOVE, "portfolioId==P1", List.of("dealId"),
+                List.of(new SubscriptionTarget("FxSpotForwardTrade", true)), status);
         return s;
     }
 
@@ -50,7 +52,9 @@ class SubscriptionControllerTest {
         mvc.perform(post("/api/v1/subscribers/risk-service/subscriptions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"topicPostfix":"prod","fields":["dealId"],
+                                {"topicPostfix":"prod",
+                                 "targets":[{"objectClass":"FxSpotForwardTrade","includeSubclasses":true}],
+                                 "fields":["dealId"],
                                  "filter":"portfolioId==P1","engine":"EVENT_WITH_REMOVE"}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.subscriptionId").value("sub-1"))

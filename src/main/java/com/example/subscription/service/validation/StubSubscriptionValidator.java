@@ -1,6 +1,7 @@
 package com.example.subscription.service.validation;
 
 import com.example.subscription.domain.EngineType;
+import com.example.subscription.domain.SubscriptionTarget;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,9 +18,10 @@ public class StubSubscriptionValidator implements SubscriptionValidator {
     private static final Logger log = LoggerFactory.getLogger(StubSubscriptionValidator.class);
 
     @Override
-    public void validate(String subscriberName, EngineType engine, String filter, List<String> fields) {
-        log.debug("Stub validation passed for subscriber={} engine={} fields={} filterLen={}",
-                subscriberName, engine, fields == null ? 0 : fields.size(),
-                filter == null ? 0 : filter.length());
+    public void validate(String subscriberName, EngineType engine,
+                         List<SubscriptionTarget> targets, String filter, List<String> fields) {
+        log.debug("Stub validation passed for subscriber={} engine={} targets={} fields={} filterLen={}",
+                subscriberName, engine, targets == null ? 0 : targets.size(),
+                fields == null ? 0 : fields.size(), filter == null ? 0 : filter.length());
     }
 }

@@ -16,6 +16,10 @@ public record CreateSubscriptionRequest(
                 example = "prod", requiredMode = Schema.RequiredMode.REQUIRED)
         String topicPostfix,
 
+        @Schema(description = "Классы объектов, на которые оформлена подписка (мультикласс). "
+                + "Не может быть пустым.", requiredMode = Schema.RequiredMode.REQUIRED)
+        List<TargetRequest> targets,
+
         @Schema(description = "Список возвращаемых полей объекта (не может быть пустым)",
                 example = "[\"dealId\", \"portfolioId\", \"status\"]",
                 requiredMode = Schema.RequiredMode.REQUIRED)
@@ -31,4 +35,26 @@ public record CreateSubscriptionRequest(
                 requiredMode = Schema.RequiredMode.REQUIRED)
         String engine
 ) {
+
+    /**
+     * A class target: {@code objectClass} plus whether subclasses are included. {@code includeSubclasses}
+     * defaults to {@code true} (polymorphic) when omitted; pass {@code false} for an exact-class match.
+     */
+    @Schema(name = "TargetRequest", description = "Класс-цель подписки")
+    public record TargetRequest(
+
+            @Schema(description = "Класс объекта (sourceValue из метамодели)",
+                    example = "FxSpotForwardTrade", requiredMode = Schema.RequiredMode.REQUIRED)
+            String objectClass,
+
+            @Schema(description = "Включать наследников класса. По умолчанию true (полиморфно); "
+                    + "false — только точный класс.", example = "true", nullable = true)
+            Boolean includeSubclasses
+    ) {
+
+        /** Effective flag with the default applied (true when the client omitted it). */
+        public boolean includeSubclassesOrDefault() {
+            return includeSubclasses == null || includeSubclasses;
+        }
+    }
 }
