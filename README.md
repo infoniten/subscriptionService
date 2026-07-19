@@ -1,121 +1,92 @@
 # Subscription Service
 
-Управление конфигурацией подписок пользователей на поток объектов. Сервис предоставляет REST API
-для создания, просмотра, приостановки, возобновления и удаления подписок. Обработкой Kafka-потока,
-фильтрацией и компиляцией RSQL занимается Engine Service — здесь этого нет.
+Control-plane управления подписками на поток объектов. Сервис предоставляет REST API для создания,
+просмотра, приостановки, возобновления, удаления подписок и запуска initialization. **PostgreSQL** —
+единственный Source Of Truth конфигурации; в **Redis** сервис публикует runtime-конфигурацию, которую
+читают delivery-движки (`delivery-engine-batch`, `delivery-engine-event`) и filter-enrichment. Сам
+сервис Kafka-поток **не** обрабатывает, RSQL не компилирует и объекты не доставляет — это работа
+движков.
+
+```mermaid
+flowchart LR
+  CLIENT[Клиенты / подписчики] -->|REST /api/v1| SS[**Subscription Service**]
+  SS -->|source of truth| PG[(PostgreSQL)]
+  SS -->|runtime config + сигнал| REDIS[(Redis)]
+  DD[DataDictionary · метамодель] -.загрузка на старте.-> SS
+  SS -.->|POST .../initialization| INIT[Initialization Service]
+  ENGINE[Engine Service] -->|POST /internal/.../fail| SS
+  REDIS -.reads.-> BATCH[Delivery Engine Batch]
+  REDIS -.reads.-> EVENT[Delivery Engine Event]
+  REDIS -.reads.-> FE[Filter Enrichment Service]
+```
+
+Место в системе: Subscription Service — **единственный писатель** контракта конфигурации в Redis
+(`sub:{id}`, `subs:runtime`, канал `subscriptions:changes`). Движки этот контракт только читают и
+никогда не пишут; при недоступности исходного объекта или ошибке компиляции фильтра движок сообщает об
+этом обратно через внутренний `POST /internal/subscriptions/{id}/fail`.
+
+## Ключевые свойства
+
+- **Immutable-конфигурация.** `filter`, `fields`, `engine`, `topicPostfix`, `targets` после создания не
+  меняются: любое изменение клиент моделирует как новую подписку с новым id. Со временем меняется
+  только `status` (и диагностика FAILED).
+- **Redis — обязательная часть write-path.** Любая операция изменения конфигурации выполняется в одной
+  транзакции, пишущей и в PostgreSQL, и в Redis. При недоступности Redis выбрасывается
+  `RedisUnavailableException`, транзакция PostgreSQL откатывается, клиент получает **HTTP 503**, а
+  подписка не считается изменённой. Read-операции при недоступности Redis продолжают работать.
+- **Fail-fast по метамодели.** Метамодель DataDictionary загружается один раз на старте; если её не
+  удалось загрузить, приложение не поднимается. По метамодели валидируются `targets`, `fields` и
+  селекторы `filter` (полиморфные / мульти-класс таргеты).
 
 ## Стек
 
-- Java 17, Spring Boot 3.3
-- PostgreSQL — **единственный Source Of Truth** (JPA + Flyway)
-- Redis — runtime-конфигурация (`sub:{id}`, `subs:runtime`) + Pub/Sub сигнал (`subscriptions:changes`)
-- Maven
+Java 17, Spring Boot 3.3.5, Spring Web, Spring Data JPA, Spring Data Redis, Bean Validation, Actuator,
+springdoc-openapi, PostgreSQL + **Liquibase**, Maven. Тесты — JUnit/Mockito + H2.
 
-## Архитектура (ключевые компоненты)
+## Быстрый старт
 
-| Компонент | Ответственность |
-|-----------|-----------------|
-| `SubscriptionController` | Публичный REST API в namespace `/api/v1/subscribers/{subscriberName}` |
-| `InternalSubscriptionController` | Внутренний `POST /internal/subscriptions/{id}/fail` для Engine |
-| `SubscriptionService` | Жизненный цикл подписки, транзакционный write-path (PostgreSQL + Redis) |
-| `RuntimeConfigStore` / `RedisRuntimeConfigStore` | Runtime-конфигурация в Redis |
-| `ConfigChangePublisher` / `RedisConfigChangePublisher` | Pub/Sub сигнал `CONFIG_CHANGED` |
-| `RateCounterStore` | Почасовые счётчики лимитов в Redis |
-| `SubscriptionValidator` (stub) | Валидация подписки — сейчас заглушка, публичный API от неё не зависит |
-| `QuotaService` | Конфигурируемые Rate Limits |
-| `TopicNameResolver` | Вычисление имени топика `subscription.{subscriberName}.{topicPostfix}` |
-| `InitializationClient` | Вызов Initialization Service |
+```bash
+docker compose up -d          # PostgreSQL + Redis (см. docker-compose.yml)
+mvn spring-boot:run           # сервис на :8080
+```
 
-## Write-path и целостность
+Кроме PostgreSQL и Redis для старта нужен доступный **DataDictionary** с загруженной метамоделью (см.
+соседний проект `DataDictionary`). Основные env: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST`,
+`REDIS_PORT`, `DATA_DICTIONARY_URL`, `INIT_SERVICE_URL` — полный справочник в
+[docs/configuration.md](docs/configuration.md).
 
-Любая операция изменения конфигурации выполняется в одной транзакции, которая пишет и в PostgreSQL,
-и в Redis. Redis — **обязательная часть write-path**: при его недоступности выбрасывается
-`RedisUnavailableException`, транзакция PostgreSQL откатывается, клиент получает **HTTP 503**, и
-подписка **не считается созданной/изменённой**. Read-операции при недоступности Redis продолжают работать.
-
-## REST API
-
-Базовый путь: `/api/v1/subscribers/{subscriberName}/subscriptions`. `subscriberName` всегда берётся
-из URI и никогда из тела запроса. Обращение к чужой подписке возвращает `404`.
-
-| Метод | Путь | Действие |
-|-------|------|----------|
-| `POST` | `/` | Создать подписку (201) |
-| `GET` | `/{id}` | Получить подписку |
-| `GET` | `/?status=&topicPostfix=&engine=` | Список с фильтрами |
-| `POST` | `/{id}/pause` | ACTIVE → PAUSED |
-| `POST` | `/{id}/resume` | PAUSED → ACTIVE (`{"runInitialization":true}` → вызов Initialization Service) |
-| `DELETE` | `/{id}` | → DELETED (топик не удаляется) |
-| `POST` | `/{id}/initialization` | Запуск Initialization Service (202) |
-| `POST` | `/internal/subscriptions/{id}/fail` | Внутренний перевод в FAILED |
-
-### Пример
+## Пример
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/subscribers/risk-service/subscriptions \
   -H 'Content-Type: application/json' \
-  -d '{"topicPostfix":"prod","fields":["dealId","portfolioId","status"],
-       "filter":"portfolioId==P1","engine":"EVENT_WITH_REMOVE"}'
+  -d '{"topicPostfix":"prod",
+       "targets":[{"objectClass":"FxSpotForwardTrade","includeSubclasses":true}],
+       "fields":["Trade.portfolioId","FxSpotForwardTrade.baseCurrency.code"],
+       "filter":"Trade.portfolioId==P1","engine":"EVENT_WITH_REMOVE"}'
 ```
 
-## Формат ошибки
+Ответ (201) содержит `subscriptionId`, вычисленное имя топика `subscription.risk-service.prod`,
+`status: ACTIVE` и эхо конфигурации. Параллельно сервис пишет `sub:{id}` в Redis, добавляет id в
+`subs:runtime` и публикует `CONFIG_CHANGED` в канал `subscriptions:changes`.
 
-```json
-{ "code": "INVALID_FILTER", "message": "Invalid filter", "details": {} }
-```
+## Документация
 
-Коды: `INVALID_FILTER`, `INVALID_FIELDS`, `INVALID_SUBSCRIBER_NAME`, `INVALID_TOPIC_POSTFIX`,
-`UNSUPPORTED_ENGINE`, `SUBSCRIPTION_NOT_FOUND`, `INVALID_STATUS`, `QUOTA_EXCEEDED`,
-`REDIS_UNAVAILABLE`, `INITIALIZATION_FAILED`.
-
-## Rate Limits (конфигурируемые, `subscription.rate-limits.*`)
-
-Подписок на пользователя, топиков на пользователя, создаваемых подписок в час, initialization в час,
-максимум полей, максимальная длина фильтра.
-
-## Валидация полей и фильтра (DataDictionary)
-
-Компонент валидации (`SubscriptionValidator`) на старте загружает метамодель из **DataDictionary**
-и проверяет по ней список `fields` и селекторы внутри `filter`.
-
-- Источник — один эндпоинт (URL конфигурируем, `subscription.metamodel.*`):
-  - `GET /api/search-service/metadata/v3` — классы (`sourceValue` ↔ canonical), объявленные скалярные
-    поля (`declaredFields`), иерархия и связи (`relations`: `alias`/`name` → `targetClass`).
-  - Обход связей: `GLOBAL_LINK` — по `alias`, `*_SET`/`*_ITEM` — по `name`.
-- Формат поля: `Class.field` или `Class.relation.field` (обход связей), например
-  `Trade.portfolioId`, `Entity.id`, `FxSpotForwardTrade.baseCurrency.code`. Наследованные поля/связи
-  видны через иерархию классов.
-- Ошибки: неверные поля → `INVALID_FIELDS`, неверные селекторы фильтра → `INVALID_FILTER`.
-  RSQL не компилируется — из фильтра лишь извлекаются селекторы `Class.field` (это работа Engine).
-- **Fail-fast**: если метамодель не удалось загрузить на старте, приложение не поднимается.
-  URL DataDictionary: env `DATA_DICTIONARY_URL` (по умолчанию `http://data-dictionary:8080`).
-
-> Для локального запуска, помимо PostgreSQL и Redis, должен быть доступен DataDictionary
-> с загруженной метамоделью (см. соседний проект `DataDictionary`, его `docker-compose.yml` и
-> `seed-data/metamodel-seed.json`).
+| Документ | О чём |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Место в системе, компоненты (реальные классы/пакеты), поток создания подписки, связь с движками через Redis, транзакционный write-path |
+| [docs/api.md](docs/api.md) | REST API справочник: публичные эндпоинты, DTO, коды ошибок, примеры JSON + внутренний `/internal/.../fail` |
+| [docs/redis-contract.md](docs/redis-contract.md) | **Контракт Redis** для движков: ключи `sub:{id}`, `subs:runtime`, канал `subscriptions:changes`, форма JSON, жизненный цикл статусов |
+| [docs/data-model.md](docs/data-model.md) | Схема PostgreSQL по Liquibase (таблицы, колонки, индексы, связи), engine-типы и статусы |
+| [docs/configuration.md](docs/configuration.md) | Полный справочник настроек `subscription.*`, `spring.*`, `management.*` и переменных окружения |
+| [docs/operations.md](docs/operations.md) | Runbook: health-пробы, миграции Liquibase, зависимости, таблица «симптом → причина → что проверить», деплой |
 
 ## OpenAPI / Swagger
 
-Документация генерируется автоматически (springdoc-openapi) и охватывает только публичный API
-(`/api/v1/**`); внутренний `/internal/**` в спеку не попадает.
+Документируется только публичный API (`/api/v1/**`); внутренний `/internal/**` в спеку не попадает.
 
 - OpenAPI JSON: `GET /v3/api-docs`
 - Swagger UI: `GET /swagger-ui.html`
-
-## Kubernetes probes
-
-- Liveness: `GET /actuator/health/liveness`
-- Readiness: `GET /actuator/health/readiness` — проверяет **PostgreSQL и Redis**.
-
-## Запуск локально
-
-```bash
-docker compose up -d          # PostgreSQL + Redis
-mvn spring-boot:run           # сервис на :8080
-```
-
-Конфигурация через переменные окружения: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST`,
-`REDIS_PORT`, `INIT_SERVICE_URL`.
 
 ## Тесты
 
@@ -123,5 +94,5 @@ mvn spring-boot:run           # сервис на :8080
 mvn test
 ```
 
-Юнит-тесты сервиса/квот/валидации (Mockito), web-слой (`@WebMvcTest`) и слой репозитория
-(`@DataJpaTest` на H2) — не требуют Docker.
+Юнит-тесты сервиса/квот/валидации (Mockito), web-слой (`@WebMvcTest`), слой репозитория
+(`@DataJpaTest` на H2) и разбор метамодели — Docker не требуется.
