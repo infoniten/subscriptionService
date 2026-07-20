@@ -7,6 +7,10 @@
 Внутренний API (`/internal/**`) не входит в публичный namespace, не публикуется в OpenAPI и не
 выставляется наружу.
 
+> **Машиночитаемый контракт:** [`openapi.yaml`](openapi.yaml) — экспорт сгенерированной springdoc'ом
+> OpenAPI-спеки (только публичный `/api/v1/**`). В рантайме доступна на `/v3/api-docs` (JSON),
+> `/v3/api-docs.yaml` (YAML) и в Swagger UI `/swagger-ui.html`.
+
 ## Сводка эндпоинтов
 
 | Метод | Путь | Действие | Успех |

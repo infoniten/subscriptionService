@@ -1,0 +1,527 @@
+openapi: 3.0.1
+info:
+  title: Subscription Service API
+  description: |-
+    Управление конфигурацией подписок пользователей на поток объектов.
+
+    Все операции выполняются внутри namespace подписчика
+    (`/api/v1/subscribers/{subscriberName}/...`); `subscriberName`
+    всегда берётся из URI. Обращение к чужой подписке возвращает 404.
+
+    PostgreSQL — единственный Source Of Truth; Redis — обязательная
+    часть write-path (при его недоступности операции изменения
+    конфигурации возвращают 503).
+  contact:
+    name: Subscription Service
+  license:
+    name: Proprietary
+  version: v1
+servers:
+- url: http://localhost
+  description: Generated server url
+tags:
+- name: Subscriptions
+  description: Управление жизненным циклом подписок в namespace подписчика
+paths:
+  /api/v1/subscribers/{subscriberName}/subscriptions:
+    get:
+      tags:
+      - Subscriptions
+      summary: Список подписок с фильтрами
+      description: Без фильтра по статусу подписки в статусе DELETED скрыты.
+      operationId: list
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        description: Фильтр по статусу
+        required: false
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - FAILED
+          - DELETED
+      - name: topicPostfix
+        in: query
+        description: Фильтр по постфиксу топика
+        required: false
+        schema:
+          type: string
+        example: prod
+      - name: engine
+        in: query
+        description: Фильтр по режиму Engine
+        required: false
+        schema:
+          type: string
+          enum:
+          - OBJECT_STREAM
+          - OBJECT_WITH_PREVIOUS
+          - EVENT_WITH_REMOVE
+          - OBJECT_BATCH
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionResponse"
+    post:
+      tags:
+      - Subscriptions
+      summary: Создать подписку
+      description: "Валидация → сохранение в PostgreSQL → runtime-конфигурация в Redis\
+        \ → публикация CONFIG_CHANGED. Redis — обязательная часть write-path: при\
+        \ его недоступности подписка не создаётся (503)."
+      operationId: create
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionRequest"
+        required: true
+      responses:
+        "400":
+          description: Некорректный запрос (INVALID_TOPIC_POSTFIX / INVALID_FIELDS
+            / UNSUPPORTED_ENGINE / INVALID_SUBSCRIBER_NAME)
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: Подписка создана
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "503":
+          description: REDIS_UNAVAILABLE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: QUOTA_EXCEEDED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/subscribers/{subscriberName}/subscriptions/{subscriptionId}/resume:
+    post:
+      tags:
+      - Subscriptions
+      summary: Возобновить подписку
+      description: PAUSED → ACTIVE. При runInitialization=true дополнительно вызывается
+        Initialization Service.
+      operationId: resume
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeRequest"
+      responses:
+        "502":
+          description: INITIALIZATION_FAILED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "429":
+          description: QUOTA_EXCEEDED (лимит initialization)
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: REDIS_UNAVAILABLE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SUBSCRIPTION_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: INVALID_STATUS
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/subscribers/{subscriberName}/subscriptions/{subscriptionId}/pause:
+    post:
+      tags:
+      - Subscriptions
+      summary: Приостановить подписку
+      description: ACTIVE → PAUSED. Идемпотентно для уже приостановленной подписки.
+        Replay при последующем resume отсутствует.
+      operationId: pause
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "503":
+          description: REDIS_UNAVAILABLE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SUBSCRIPTION_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: INVALID_STATUS
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/subscribers/{subscriberName}/subscriptions/{subscriptionId}/initialization:
+    post:
+      tags:
+      - Subscriptions
+      summary: Запустить initialization
+      description: Subscription Service вызывает Initialization Service; выгрузкой
+        данных сам не занимается.
+      operationId: initialize
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "502":
+          description: INITIALIZATION_FAILED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SUBSCRIPTION_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: INVALID_STATUS
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: QUOTA_EXCEEDED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "202":
+          description: Initialization job запрошен
+  /api/v1/subscribers/{subscriberName}/subscriptions/{subscriptionId}:
+    get:
+      tags:
+      - Subscriptions
+      summary: Получить подписку по id
+      operationId: get
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: SUBSCRIPTION_NOT_FOUND (в том числе при обращении к чужой подписке)
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+    delete:
+      tags:
+      - Subscriptions
+      summary: Удалить подписку
+      description: ACTIVE/PAUSED/FAILED → DELETED. Идемпотентно. Kafka-топик не удаляется.
+      operationId: delete
+      parameters:
+      - name: subscriberName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "503":
+          description: REDIS_UNAVAILABLE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: SUBSCRIPTION_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    CreateSubscriptionRequest:
+      required:
+      - engine
+      - fields
+      - targets
+      - topicPostfix
+      type: object
+      properties:
+        topicPostfix:
+          type: string
+          description: Постфикс топика; топик принадлежит паре subscriberName + topicPostfix
+          example: prod
+        targets:
+          type: array
+          description: "Классы объектов, на которые оформлена подписка (мультиклас\
+            с). Не может быть пустым."
+          items:
+            $ref: "#/components/schemas/TargetRequest"
+        fields:
+          type: array
+          description: Список возвращаемых полей объекта (не может быть пустым)
+          example:
+          - dealId
+          - portfolioId
+          - status
+          items:
+            type: string
+            description: Список возвращаемых полей объекта (не может быть пустым)
+            example: "[\"dealId\",\"portfolioId\",\"status\"]"
+        filter:
+          type: string
+          description: RSQL-фильтр. Компиляция и валидация выполняются Engine Service
+          nullable: true
+          example: portfolioId==P1
+        engine:
+          type: string
+          description: Режим работы Engine
+          example: EVENT_WITH_REMOVE
+          enum:
+          - OBJECT_STREAM
+          - OBJECT_WITH_PREVIOUS
+          - EVENT_WITH_REMOVE
+          - OBJECT_BATCH
+      description: Конфигурация создаваемой подписки (immutable)
+    TargetRequest:
+      required:
+      - objectClass
+      type: object
+      properties:
+        objectClass:
+          type: string
+          description: Класс объекта (sourceValue из метамодели)
+          example: FxSpotForwardTrade
+        includeSubclasses:
+          type: boolean
+          description: Включать наследников класса. По умолчанию true (полиморфно);
+            false — только точный класс.
+          nullable: true
+          example: true
+      description: Класс-цель подписки
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Машиночитаемый код ошибки
+          example: REDIS_UNAVAILABLE
+          enum:
+          - INVALID_FILTER
+          - INVALID_FIELDS
+          - INVALID_SUBSCRIBER_NAME
+          - INVALID_TOPIC_POSTFIX
+          - UNSUPPORTED_ENGINE
+          - SUBSCRIPTION_NOT_FOUND
+          - INVALID_STATUS
+          - QUOTA_EXCEEDED
+          - REDIS_UNAVAILABLE
+          - INITIALIZATION_FAILED
+          - INVALID_REQUEST
+          - INTERNAL_ERROR
+        message:
+          type: string
+          description: Человекочитаемое сообщение
+          example: Redis unavailable
+        details:
+          type: object
+          additionalProperties:
+            type: object
+            description: Дополнительные детали ошибки
+            example: {}
+          description: Дополнительные детали ошибки
+          example: {}
+      description: Единый формат ошибки
+    SubscriptionResponse:
+      type: object
+      properties:
+        subscriptionId:
+          type: string
+          description: Идентификатор подписки
+          example: sub-fc78797d-888f-447d-9c63-e24ea9a0aaa0
+        subscriberName:
+          type: string
+          description: Имя подписчика (из URI)
+          example: risk-service
+        topicPostfix:
+          type: string
+          description: Постфикс топика
+          example: prod
+        topic:
+          type: string
+          description: Полное имя Kafka-топика
+          example: subscription.risk-service.prod
+        targets:
+          type: array
+          description: Классы-цели подписки (мультикласс)
+          items:
+            $ref: "#/components/schemas/Target"
+        fields:
+          type: array
+          description: Возвращаемые поля объекта
+          example:
+          - dealId
+          - portfolioId
+          - status
+          items:
+            type: string
+            description: Возвращаемые поля объекта
+            example: "[\"dealId\",\"portfolioId\",\"status\"]"
+        filter:
+          type: string
+          description: RSQL-фильтр
+          nullable: true
+          example: portfolioId==P1
+        engine:
+          type: string
+          description: Режим работы Engine
+          example: EVENT_WITH_REMOVE
+        status:
+          type: string
+          description: Статус жизненного цикла
+          example: ACTIVE
+          enum:
+          - ACTIVE
+          - PAUSED
+          - FAILED
+          - DELETED
+        failureReason:
+          type: string
+          description: Причина перевода в FAILED (машиночитаемая)
+          nullable: true
+          example: FILTER_SCHEMA_MISMATCH
+        failureMessage:
+          type: string
+          description: Пояснение к FAILED
+          nullable: true
+          example: Field portfolioId not found
+        createdAt:
+          type: string
+          description: Момент создания
+          format: date-time
+        updatedAt:
+          type: string
+          description: Момент последнего изменения статуса
+          format: date-time
+      description: Представление подписки
+    Target:
+      type: object
+      properties:
+        objectClass:
+          type: string
+          description: Класс объекта
+          example: FxSpotForwardTrade
+        includeSubclasses:
+          type: boolean
+          description: Включены ли наследники
+          example: true
+      description: Класс-цель подписки
+    ResumeRequest:
+      type: object
+      properties:
+        runInitialization:
+          type: boolean
+          description: Запустить Initialization Service после возобновления
+          example: false
+          default: false
+      description: Параметры возобновления подписки
