@@ -7,8 +7,14 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 public interface SubscriptionRepository
         extends JpaRepository<Subscription, String>, JpaSpecificationExecutor<Subscription> {
+
+    /** Runtime subscriptions (ACTIVE / PAUSED) — the set mirrored into Redis. */
+    List<Subscription> findByStatusIn(Collection<SubscriptionStatus> statuses);
 
     long countBySubscriberNameAndStatusNot(String subscriberName, SubscriptionStatus status);
 
