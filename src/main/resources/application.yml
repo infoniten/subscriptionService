@@ -56,6 +56,10 @@ springdoc:
     tags-sorter: alpha
 
 subscription:
+  api:
+    # Zone offset used to render Instant timestamps (createdAt/updatedAt) in API responses,
+    # e.g. 2026-03-11T10:12:33.000+03:00. Accepts an offset ("+03:00") or a zone id ("Europe/Moscow").
+    time-zone: ${API_TIME_ZONE:+03:00}
   topic:
     prefix: subscription
   redis:
