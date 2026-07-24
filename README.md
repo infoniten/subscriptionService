@@ -7,17 +7,30 @@ Control-plane управления подписками на поток объе
 сервис Kafka-поток **не** обрабатывает, RSQL не компилирует и объекты не доставляет — это работа
 движков.
 
-```mermaid
-flowchart LR
-  CLIENT[Клиенты / подписчики] -->|REST /api/v1| SS[**Subscription Service**]
-  SS -->|source of truth| PG[(PostgreSQL)]
-  SS -->|runtime config + сигнал| REDIS[(Redis)]
-  DD[DataDictionary · метамодель] -.загрузка на старте.-> SS
-  SS -.->|POST .../initialization| INIT[Initialization Service]
-  ENGINE[Engine Service] -->|POST /internal/.../fail| SS
-  REDIS -.reads.-> BATCH[Delivery Engine Batch]
-  REDIS -.reads.-> EVENT[Delivery Engine Event]
-  REDIS -.reads.-> FE[Filter Enrichment Service]
+```plantuml
+@startuml
+!pragma layout smetana
+left to right direction
+rectangle "Клиенты / подписчики" as CLIENT
+rectangle "**Subscription Service**" as SS
+database "PostgreSQL" as PG
+database "Redis" as REDIS
+rectangle "DataDictionary · метамодель" as DD
+rectangle "Initialization Service" as INIT
+rectangle "Engine Service" as ENGINE
+rectangle "Delivery Engine Batch" as BATCH
+rectangle "Delivery Engine Event" as EVENT
+rectangle "Filter Enrichment Service" as FE
+CLIENT --> SS : REST /api/v1
+SS --> PG : source of truth
+SS --> REDIS : runtime config + сигнал
+DD ..> SS : загрузка на старте
+SS ..> INIT : POST .../initialization
+ENGINE --> SS : POST /internal/.../fail
+REDIS ..> BATCH : reads
+REDIS ..> EVENT : reads
+REDIS ..> FE : reads
+@enduml
 ```
 
 Место в системе: Subscription Service — **единственный писатель** контракта конфигурации в Redis

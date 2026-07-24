@@ -10,34 +10,38 @@ PostgreSQL — единственный Source Of Truth конфигурации
 
 ## Схема
 
-```mermaid
-erDiagram
-  subscription ||--o{ subscription_fields : "fields (ordered)"
-  subscription ||--o{ subscription_target : "targets (ordered)"
-
-  subscription {
-    varchar64  id PK
-    varchar255 subscriber_name
-    varchar255 topic_postfix
-    varchar64  engine
-    text       filter
-    varchar32  status
-    varchar255 failure_reason
-    text       failure_message
-    timestamptz created_at
-    timestamptz updated_at
-  }
-  subscription_fields {
-    varchar64  subscription_id FK
-    varchar255 field_name
-    int        field_order
-  }
-  subscription_target {
-    varchar64  subscription_id FK
-    varchar255 object_class
-    boolean    include_subclasses
-    int        target_order
-  }
+```plantuml
+@startuml
+!pragma layout smetana
+entity subscription {
+  * id : varchar64 <<PK>>
+  --
+  subscriber_name : varchar255
+  topic_postfix : varchar255
+  engine : varchar64
+  filter : text
+  status : varchar32
+  failure_reason : varchar255
+  failure_message : text
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+entity subscription_fields {
+  * subscription_id : varchar64 <<FK>>
+  --
+  field_name : varchar255
+  field_order : int
+}
+entity subscription_target {
+  * subscription_id : varchar64 <<FK>>
+  --
+  object_class : varchar255
+  include_subclasses : boolean
+  target_order : int
+}
+subscription ||--o{ subscription_fields : "fields (ordered)"
+subscription ||--o{ subscription_target : "targets (ordered)"
+@enduml
 ```
 
 ## Таблица `subscription`

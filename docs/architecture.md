@@ -2,17 +2,30 @@
 
 ## Место в системе
 
-```mermaid
-flowchart LR
-  CLIENT[Клиенты / подписчики] -->|REST /api/v1| SS[**Subscription Service**]
-  SS -->|source of truth| PG[(PostgreSQL)]
-  SS -->|sub:id · subs:runtime · CONFIG_CHANGED| REDIS[(Redis)]
-  DD[DataDictionary] -.метамодель на старте.-> SS
-  SS -.->|POST /internal/initialization| INIT[Initialization Service]
-  ENG[Engine Service] -->|POST /internal/subscriptions/id/fail| SS
-  REDIS -.reads.-> BATCH[Delivery Engine Batch]
-  REDIS -.reads.-> EVENT[Delivery Engine Event]
-  REDIS -.reads.-> FE[Filter Enrichment Service]
+```plantuml
+@startuml
+!pragma layout smetana
+left to right direction
+rectangle "Клиенты / подписчики" as CLIENT
+rectangle "**Subscription Service**" as SS
+database "PostgreSQL" as PG
+database "Redis" as REDIS
+rectangle "DataDictionary" as DD
+rectangle "Initialization Service" as INIT
+rectangle "Engine Service" as ENG
+rectangle "Delivery Engine Batch" as BATCH
+rectangle "Delivery Engine Event" as EVENT
+rectangle "Filter Enrichment Service" as FE
+CLIENT --> SS : REST /api/v1
+SS --> PG : source of truth
+SS --> REDIS : sub:id · subs:runtime · CONFIG_CHANGED
+DD ..> SS : метамодель на старте
+SS ..> INIT : POST /internal/initialization
+ENG --> SS : POST /internal/subscriptions/id/fail
+REDIS ..> BATCH : reads
+REDIS ..> EVENT : reads
+REDIS ..> FE : reads
+@enduml
 ```
 
 Subscription Service — control-plane. Он хранит конфигурацию подписок в PostgreSQL (единственный Source
@@ -60,32 +73,33 @@ Runtime-конфигурация хранится только для подпи
 
 ## Поток создания подписки
 
-```mermaid
-sequenceDiagram
-  participant C as Клиент
-  participant Ctl as SubscriptionController
-  participant Svc as SubscriptionService
-  participant P as SubscriptionInputParser
-  participant V as MetamodelValidator
-  participant Q as QuotaService
-  participant DB as PostgreSQL
-  participant R as Redis
-  C->>Ctl: POST /api/v1/subscribers/{name}/subscriptions
-  Ctl->>Svc: create(name, request)
-  Note over Svc,R: всё внутри одной транзакции
-  Svc->>P: validateSubscriberName + parseAndValidate
-  P-->>Svc: EngineType (формат ок)
-  Svc->>V: validate(targets, fields, filter) по метамодели
-  V-->>Svc: ок (иначе INVALID_TARGETS/FIELDS/FILTER)
-  Svc->>Q: checkAndReserveForCreate (лимиты + счётчик/час)
-  Q-->>Svc: ок (иначе QUOTA_EXCEEDED)
-  Svc->>DB: save(Subscription, status=ACTIVE)
-  Svc->>R: SET sub:{id} = RuntimeConfig(JSON)
-  Svc->>R: SADD subs:runtime {id}
-  Svc->>R: PUBLISH subscriptions:changes {type:CONFIG_CHANGED, subscriptionId}
-  Note over Svc,R: сбой Redis → RedisUnavailableException → rollback → 503
-  Svc-->>Ctl: Subscription
-  Ctl-->>C: 201 SubscriptionResponse
+```plantuml
+@startuml
+participant Клиент as C
+participant SubscriptionController as Ctl
+participant SubscriptionService as Svc
+participant SubscriptionInputParser as P
+participant MetamodelValidator as V
+participant QuotaService as Q
+participant PostgreSQL as DB
+participant Redis as R
+C -> Ctl : POST /api/v1/subscribers/{name}/subscriptions
+Ctl -> Svc : create(name, request)
+note over Svc, R : всё внутри одной транзакции
+Svc -> P : validateSubscriberName + parseAndValidate
+P --> Svc : EngineType (формат ок)
+Svc -> V : validate(targets, fields, filter) по метамодели
+V --> Svc : ок (иначе INVALID_TARGETS/FIELDS/FILTER)
+Svc -> Q : checkAndReserveForCreate (лимиты + счётчик/час)
+Q --> Svc : ок (иначе QUOTA_EXCEEDED)
+Svc -> DB : save(Subscription, status=ACTIVE)
+Svc -> R : SET sub:{id} = RuntimeConfig(JSON)
+Svc -> R : SADD subs:runtime {id}
+Svc -> R : PUBLISH subscriptions:changes {type:CONFIG_CHANGED, subscriptionId}
+note over Svc, R : сбой Redis → RedisUnavailableException → rollback → 503
+Svc --> Ctl : Subscription
+Ctl --> C : 201 SubscriptionResponse
+@enduml
 ```
 
 Порядок валидаций в `create`: формат (`SubscriptionInputParser`) → семантика по метамодели
@@ -95,18 +109,20 @@ sequenceDiagram
 
 ## Жизненный цикл и связь с движками
 
-```mermaid
-stateDiagram-v2
-  [*] --> ACTIVE: create
-  ACTIVE --> PAUSED: pause
-  PAUSED --> ACTIVE: resume
-  ACTIVE --> FAILED: internal fail
-  PAUSED --> FAILED: internal fail
-  ACTIVE --> DELETED: delete
-  PAUSED --> DELETED: delete
-  FAILED --> DELETED: delete
-  FAILED --> [*]
-  DELETED --> [*]
+```plantuml
+@startuml
+!pragma layout smetana
+[*] --> ACTIVE : create
+ACTIVE --> PAUSED : pause
+PAUSED --> ACTIVE : resume
+ACTIVE --> FAILED : internal fail
+PAUSED --> FAILED : internal fail
+ACTIVE --> DELETED : delete
+PAUSED --> DELETED : delete
+FAILED --> DELETED : delete
+FAILED --> [*]
+DELETED --> [*]
+@enduml
 ```
 
 - **pause** `ACTIVE → PAUSED`, **resume** `PAUSED → ACTIVE` — обе операции переписывают `sub:{id}`

@@ -80,12 +80,19 @@ Redis — обязательная часть write-path: при `DataAccessExce
 
 ## Жизненный цикл статусов в Redis
 
-```mermaid
-flowchart LR
-  A[create → ACTIVE] -->|SET + SADD + PUBLISH| IN[sub:id есть · id в subs:runtime]
-  IN -->|pause/resume| IN
-  IN -->|delete / fail| OUT[sub:id удалён · id снят с subs:runtime]
-  OUT -->|PUBLISH CONFIG_CHANGED| SIG[движки перечитывают и убирают подписку]
+```plantuml
+@startuml
+!pragma layout smetana
+left to right direction
+rectangle "create → ACTIVE" as A
+rectangle "sub:id есть · id в subs:runtime" as IN
+rectangle "sub:id удалён · id снят с subs:runtime" as OUT
+rectangle "движки перечитывают и убирают подписку" as SIG
+A --> IN : SET + SADD + PUBLISH
+IN --> IN : pause/resume
+IN --> OUT : delete / fail
+OUT --> SIG : PUBLISH CONFIG_CHANGED
+@enduml
 ```
 
 | Статус (`SubscriptionStatus`) | `sub:{id}` | Членство в `subs:runtime` |
